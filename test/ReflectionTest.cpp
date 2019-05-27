@@ -1,4 +1,4 @@
-#include "../Helper/Person.h"
+#include "../helper/Person.h"
 #include <gtest/gtest.h>
 
 class ReflectionTest : public ::testing::Test

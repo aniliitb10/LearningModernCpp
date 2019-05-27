@@ -1,10 +1,13 @@
 #pragma once
 
-#include "../Reflection/Reflection.h"
+#include "../reflection/Reflection.h"
 
 #include <string>
 #include <tuple>
 
+/**
+ * This is to help in getting reflection
+ */
 class Person
 {
 public:
