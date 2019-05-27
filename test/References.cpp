@@ -15,6 +15,9 @@ struct References : public ::testing::Test
       return _name;
     }
 
+    bool isRvalue()&& { return true;}
+    bool isRvalue()& { return false;}
+
     template <typename T>
     constexpr static T&& test_forwd_ref(T&& obj)
     {
@@ -25,6 +28,19 @@ struct References : public ::testing::Test
     std::string _name;
   };
 };
+
+TEST_F(References, CtrTest)
+{
+  std::string name{"cpp_programmer"};
+  const Person person{name};
+  EXPECT_EQ(person.getName(), name);
+
+  const Person moved_person{std::move(name)};
+  // UB to use the std::string after it has been move from
+  // but should be okay for testing
+  EXPECT_TRUE(name.empty());
+  EXPECT_EQ(moved_person.getName(), "cpp_programmer");
+}
 
 TEST_F(References, GetNameTypeTest)
 {
@@ -177,15 +193,21 @@ TEST_F(References, DeclValTest)
  */
 TEST_F(References, ForwardTest)
 {
-  // If an lvalue reference is passed, then returned type is also an lvalue reference
+  // If an lvalue reference is passed to test_forwd_ref, then returned type is also an lvalue reference
   // NOTE: By definition, lvalue references are lvalues
   static_assert(std::is_same_v<decltype(Person::test_forwd_ref(std::declval<Person&>())), Person&>);
   static_assert(!std::is_same_v<decltype(Person::test_forwd_ref(std::declval<Person&>())), Person>);
   static_assert(!std::is_same_v<decltype(Person::test_forwd_ref(std::declval<Person&>())), Person&&>);
 
-  // If an rvalue reference is passed, then returned type is rvalue reference
+  // If an rvalue reference is passed to test_forwd_ref, then returned type is rvalue reference
   // NOTE: by definition, rvalue reference returned by a function is an rvalue
   static_assert(std::is_same_v<decltype(Person::test_forwd_ref(std::declval<Person>())), Person&&>);
   static_assert(!std::is_same_v<decltype(Person::test_forwd_ref(std::declval<Person>())), Person&>);
   static_assert(!std::is_same_v<decltype(Person::test_forwd_ref(std::declval<Person>())), Person>);
+
+  // some tests using actual objects
+  EXPECT_EQ(true, Person::test_forwd_ref(Person("common_name")).isRvalue());
+
+  Person person{"common_name_again"};
+  EXPECT_EQ(false, Person::test_forwd_ref(person).isRvalue());
 }
