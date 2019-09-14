@@ -6,7 +6,7 @@ struct References : public ::testing::Test
   class Person
   {
   public:
-    template <typename T, typename = std::enable_if_t <std::is_constructible_v<std::string, T>>>
+    template <typename T, typename = std::enable_if_t <std::is_constructible_v<std::string, T>, T>>
     explicit Person(T&& name_):
     _name(std::forward<T>(name_)) {}
 
@@ -19,9 +19,24 @@ struct References : public ::testing::Test
     bool isRvalue()& { return false;}
 
     template <typename T>
-    constexpr static T&& test_forwd_ref(T&& obj)
+    constexpr static decltype(auto) test_forward_ref(T&& obj)
     {
+      // as all parameters are always lvalues, here is a test
+      using decayed_t = std::decay_t<T>;
+      static_assert(std::is_same_v<decayed_t, Person>);
+      EXPECT_TRUE(!obj.isRvalue());
+
       return std::forward<T>(obj);
+    }
+
+    /**
+     * BAD FUNCTION
+     * This doesn't even compile when arg is a rvalue!
+     * As Person& (lvalue reference) can't bind with an rvalue
+     * */
+    template <typename T>
+    constexpr static T&& scott_meyers_forward(std::remove_reference_t<T>& arg) {
+      return static_cast<T&&>(arg);
     }
 
   private:
@@ -42,7 +57,7 @@ TEST_F(References, CtrTest)
   EXPECT_EQ(moved_person.getName(), "cpp_programmer");
 }
 
-TEST_F(References, GetNameTypeTest)
+TEST_F(References, DecayTest)
 {
   using GetNameType = decltype(std::declval<Person>().getName());
 
@@ -81,7 +96,7 @@ TEST_F(References, ConstructionTest)
   static_assert(std::is_constructible_v<Person, std::decay_t<decltype(char_array)>>);
 
   // Even from the decayed std::string
-  static_assert(std::is_constructible_v<References::Person, std::decay_t<std::string>>);
+  static_assert(std::is_constructible_v<Person, std::decay_t<std::string>>);
 
   // But not from anything else, like: int, etc:
   static_assert(!std::is_constructible_v<Person, int>);
@@ -159,6 +174,63 @@ TEST_F(References, MoveTest)
 }
 
 /**
+ * It's tricky here!
+ * for function like:
+ *
+ * decltype(auto) f(T&& arg) {
+ *    return std::forward<T>(arg);
+ * }
+ *
+ * if arg is an lvalue, T is deduced to be lvalue reference
+ * hence, if outside such functions, if we try to pass arg manually
+ * then calling std::forward<T&>(arg) should be the correct way to do so
+ * instead of   std::forward<T>(arg)
+ *
+ * In a nutshell: calling std::forward without involving type deduction
+ * is nothing more than static_cast-ing
+ * */
+
+TEST_F(References, StdForwardTest)
+{
+  Person person{"cpp_programmer"};
+
+  // when template type is Person, then return type is Person&&, as std::forward casts into T&&
+  // and T here is Person&&, so reference collapsing makes it again Person&&
+  // this is never the case when type deduction happens
+  // in fact, this is what happens std::move() is called on lvalues
+  static_assert(std::is_same_v<decltype(std::forward<Person>(person)), Person&&>);
+  static_assert(std::is_same_v<decltype(std::forward<Person>(person)), decltype(std::move(person))>);
+  // By definition, rvalue reference returned by a function is an rvalue
+  EXPECT_TRUE(std::forward<Person>(Person("common_name")).isRvalue());
+
+  // std::forward on lvalue returns lvalue reference to the lvalue
+  // std::forward's && on Person& is collapsed to just Person&
+  static_assert(std::is_same_v<decltype(std::forward<Person&>(person)), Person&>);
+  // By definition, lvalue references are lvalues
+  EXPECT_FALSE(std::forward<Person&>(person).isRvalue());
+
+  // CHEATING: argument type is lvalue but the template type is rvalue reference
+  // this works as an lvalue can be casted into rvalue reference
+  // this is what std::move does with lvalues
+  // this is never the case when type detection happens
+  static_assert(std::is_same_v<decltype(std::forward<Person&&>(person)), Person&&>);
+  static_assert(std::is_same_v<decltype(std::forward<Person&&>(person)), decltype(std::move(person))>);
+
+  // std::forward on rvalue returns rvalue reference (same as when type deduction heppens)
+  static_assert(std::is_same_v<decltype(std::forward<Person&&>(Person{"some_name"})), Person&&>);
+  // By definition, rvalue references returned from a function are rvalues
+  EXPECT_TRUE(std::forward<Person&&>(Person("common_name")).isRvalue());
+  // for rvalues, effect is same as calling std::move as well
+  static_assert(std::is_same_v<decltype(std::forward<Person&&>(Person{"some_name"})), decltype(std::move(Person{"some_name"}))>);
+
+  // This is IMPRESSIVE: rvalue reference overload has an internal check (static_assert) that
+  // type (lvalue reference here) is not an lvalue reference
+  // as casting an rvalue to lvalue reference should be UB
+  // hence, following fails to compile
+  // static_assert(std::is_same_v<decltype(std::forward<Person&>(Person{"some_name"})), Person&&>);
+}
+
+/**
  * To familiarize with the behavior of std::declval
  * It actually adds an rvalue ref to the type
  */
@@ -167,7 +239,7 @@ TEST_F(References, DeclValTest)
   Person person{"dummy person"};
   static_assert(std::is_same_v<decltype(person), Person>);
 
-  // special case, mentioned in Effective Modern C++
+  // special case, mentioned in Effective Modern C++, (person) yields an expression more complicated type than a name
   static_assert(std::is_same_v<decltype((person)), Person&>);
 
   // Simply changes from non-reference type Person to rvalue ref type Person
@@ -191,23 +263,42 @@ TEST_F(References, DeclValTest)
  * It simply adds rvalue_reference to type T
  * and hence, using reference collapsing rules, it can be used to get lvalue reference as well
  */
-TEST_F(References, ForwardTest)
+TEST_F(References, ForwardRefTest)
 {
-  // If an lvalue reference is passed to test_forwd_ref, then returned type is also an lvalue reference
-  // NOTE: By definition, lvalue references are lvalues
-  static_assert(std::is_same_v<decltype(Person::test_forwd_ref(std::declval<Person&>())), Person&>);
-  static_assert(!std::is_same_v<decltype(Person::test_forwd_ref(std::declval<Person&>())), Person>);
-  static_assert(!std::is_same_v<decltype(Person::test_forwd_ref(std::declval<Person&>())), Person&&>);
+  // If an lvalue reference is passed to test_forward_ref, then returned type is also an lvalue reference
+  static_assert(std::is_same_v<decltype(Person::test_forward_ref(std::declval<Person&>())), Person&>);
+  static_assert(!std::is_same_v<decltype(Person::test_forward_ref(std::declval<Person&>())), Person>);
+  static_assert(!std::is_same_v<decltype(Person::test_forward_ref(std::declval<Person&>())), Person&&>);
 
-  // If an rvalue reference is passed to test_forwd_ref, then returned type is rvalue reference
-  // NOTE: by definition, rvalue reference returned by a function is an rvalue
-  static_assert(std::is_same_v<decltype(Person::test_forwd_ref(std::declval<Person>())), Person&&>);
-  static_assert(!std::is_same_v<decltype(Person::test_forwd_ref(std::declval<Person>())), Person&>);
-  static_assert(!std::is_same_v<decltype(Person::test_forwd_ref(std::declval<Person>())), Person>);
+  // If an rvalue reference is passed to test_forward_ref, then returned type is rvalue reference
+  static_assert(std::is_same_v<decltype(Person::test_forward_ref(std::declval<Person>())), Person&&>);
+  static_assert(!std::is_same_v<decltype(Person::test_forward_ref(std::declval<Person>())), Person&>);
+  static_assert(!std::is_same_v<decltype(Person::test_forward_ref(std::declval<Person>())), Person>);
 
-  // some tests using actual objects
-  EXPECT_EQ(true, Person::test_forwd_ref(Person("common_name")).isRvalue());
+  // By definition, rvalue reference returned by
+  // a function is an rvalue
+  EXPECT_EQ(true, Person::test_forward_ref(Person("common_name")).isRvalue());
 
+  // By definition, lvalue references are lvalues
   Person person{"common_name_again"};
-  EXPECT_EQ(false, Person::test_forwd_ref(person).isRvalue());
+  EXPECT_EQ(false, Person::test_forward_ref(person).isRvalue());
+}
+
+/**
+ Scott Meyers's version doesn't compile with rvalues
+ otherwise, it works well with lvalues
+*/
+TEST_F(References, ScottMeyersForwardTest)
+{
+  Person person{"common_name"};
+  static_assert(std::is_same_v<decltype(std::forward<Person&>(person)),
+                               decltype(Person::scott_meyers_forward<Person&>(person))>);
+
+  // CHEATING! for Scott's version, I am passing an lvalue but template type is rvalue reference
+  static_assert(std::is_same_v<decltype(std::forward<Person&&>(Person{"common_name"})),
+                               decltype(Person::scott_meyers_forward<Person&&>(person))>);
+
+  // compilation error! As Person& (lvalue reference) can't bind to an rvalue
+  //  static_assert(std::is_same_v<decltype(std::forward<Person&&>(Person{"common_name"})),
+  //                               decltype(Person::scott_meyers_forward<Person&&>(Person{"common_name"}))>);
 }
