@@ -15,6 +15,11 @@ struct References : public ::testing::Test
       return _name;
     }
 
+    std::string& mutGetName()
+    {
+      return _name;
+    }
+
     bool isRvalue()&& { return true;}
     bool isRvalue()& { return false;}
 
@@ -24,7 +29,7 @@ struct References : public ::testing::Test
       // as all parameters are always lvalues, here is a test
       using decayed_t = std::decay_t<T>;
       static_assert(std::is_same_v<decayed_t, Person>);
-      EXPECT_TRUE(!obj.isRvalue());
+      EXPECT_FALSE(obj.isRvalue());
 
       return std::forward<T>(obj);
     }
@@ -39,9 +44,16 @@ struct References : public ::testing::Test
       return static_cast<T&&>(arg);
     }
 
+    template <typename Tuple>
+    static void constRefTest(const Tuple& tuple) {
+      std::string& name = std::get<0>(tuple);
+      name = "mutated!";
+    }
+
   private:
     std::string _name;
   };
+
 };
 
 TEST_F(References, CtrTest)
@@ -55,6 +67,12 @@ TEST_F(References, CtrTest)
   // but should be okay for testing
   EXPECT_TRUE(name.empty());
   EXPECT_EQ(moved_person.getName(), "cpp_programmer");
+}
+
+TEST_F(References, ConstRefTest) {
+  Person person{"name"};
+  Person::constRefTest(std::tie(person.mutGetName()));
+  EXPECT_EQ(person.getName(), "mutated!");
 }
 
 TEST_F(References, DecayTest)
@@ -277,11 +295,11 @@ TEST_F(References, ForwardRefTest)
 
   // By definition, rvalue reference returned by
   // a function is an rvalue
-  EXPECT_EQ(true, Person::test_forward_ref(Person("common_name")).isRvalue());
+  EXPECT_TRUE(Person::test_forward_ref(Person("common_name")).isRvalue());
 
   // By definition, lvalue references are lvalues
   Person person{"common_name_again"};
-  EXPECT_EQ(false, Person::test_forward_ref(person).isRvalue());
+  EXPECT_FALSE(Person::test_forward_ref(person).isRvalue());
 }
 
 /**

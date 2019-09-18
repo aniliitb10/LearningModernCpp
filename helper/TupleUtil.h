@@ -2,20 +2,23 @@
 
 #include <tuple>
 
-template <typename Tuple, typename Functor, size_t Index>
-auto applyFunc(const Tuple& tuple_, const Functor& functor_) -> void
-{
-  const auto& value = std::get<Index>(tuple_);
-  functor_(value);
-}
-
 template <typename Tuple, typename Functor, size_t Index = 0>
-auto tupleForEach(const Tuple& tuple_, const Functor& functor_) -> void
+auto tuple_for_each(const Tuple& tuple_, const Functor &functor_) -> void
 {
+  static_assert(!std::is_const_v<decltype(tuple_)>);
+  static_assert(std::is_const_v<std::remove_reference_t<decltype(tuple_)>>);
+
   constexpr auto tupleSize = std::tuple_size_v<Tuple>;
   if constexpr (Index < tupleSize)
   {
-    applyFunc<Tuple, Functor, Index>(tuple_, functor_);
-    tupleForEach<Tuple, Functor, Index + 1>(tuple_, functor_);
+    static_assert(std::is_lvalue_reference_v<decltype(std::get<Index>(tuple_))>);
+
+    // constant tuple doesn't stop its members from getting modified
+    // as their members are all lvalue references (references are inherently constant)
+    // and the const-ness of tuple doesn't propagate to its referenced variables
+    auto& value = std::get<Index>(tuple_);
+    functor_(value);
+
+    tuple_for_each<Tuple, Functor, Index + 1>(tuple_, functor_);
   }
 }

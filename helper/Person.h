@@ -25,7 +25,8 @@ public:
   _fName(std::forward<FT>(fName_)),
   _sName(std::forward<ST>(sName_)){}
 
-  auto reflect() const { return std::tie(_fName, _sName);}
+  auto reflect() const { return std::tie(_fName, _sName); }
+  auto mut_reflect() { return std::tie(_fName, _sName); }
 
 private:
   std::string _fName;
