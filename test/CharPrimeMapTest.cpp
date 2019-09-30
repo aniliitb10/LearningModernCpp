@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
-#include "../helper/CharPrimeMap.h"
-#include "../helper/algorithm.h"
+#include "../include/CharPrimeMap.h"
+#include "../include/algorithm.h"
 
 #include <algorithm>
 

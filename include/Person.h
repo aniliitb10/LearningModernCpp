@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../reflection/Reflection.h"
+#include "Reflection.h"
 
 #include <string>
 #include <tuple>

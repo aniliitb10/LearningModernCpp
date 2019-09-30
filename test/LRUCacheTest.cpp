@@ -2,7 +2,7 @@
 #include <string>
 #include <random>
 
-#include "../LRUCache/LRUCache.h"
+#include "../include/LRUCache.h"
 
 struct LRUCacheTest : public ::testing::Test {
 
