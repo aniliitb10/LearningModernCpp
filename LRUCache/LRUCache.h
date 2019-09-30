@@ -21,7 +21,7 @@ public:
   using const_iterator = typename list_type::const_iterator;
   using cache_type = std::unordered_map<Key, iterator>;
 
-  LRUCache(std::size_t size_) : _maxSize(size_) {}
+  explicit LRUCache(std::size_t size_) : _maxSize(size_) {}
 
   std::size_t size() { return _cache.size(); }
 
@@ -41,6 +41,7 @@ public:
   }
 
   // if the key exists, it is made most recently used key
+  // without overwriting the key
   // otherwise, new key-value pair inserted and made most recently used key
   iterator insert(const Key &key, const Value &value) {
     auto cacheItr = _cache.find(key);
@@ -49,16 +50,18 @@ public:
       _accessList.emplace_back(key, value);
       _cache.emplace(key, lastItr());
 
+      if (_cache.size() > _maxSize) {
+        auto firstItr = _accessList.begin();
+        _cache.erase(firstItr->first);
+        _accessList.pop_front();
+      }
+
+
     } else {
       // just move corresponding listItr to end
       _accessList.splice(_accessList.end(), _accessList, cacheItr->second);
     }
 
-    if (_cache.size() > _maxSize) {
-      auto firstItr = _accessList.begin();
-      _cache.erase(firstItr->first);
-      _accessList.pop_front();
-    }
 
     return lastItr();
   }
