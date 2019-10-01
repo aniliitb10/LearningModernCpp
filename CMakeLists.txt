@@ -3,7 +3,7 @@ project(LearningModernCpp)
 
 set(CMAKE_CXX_STANDARD 17)
 
-file(GLOB source "source/*.cpp")
+file(GLOB source "src/*.cpp")
 file(GLOB gTestSource "test/*.cpp")
 
 add_executable(LearningModernCpp main.cpp ${source} ${gTestSource})
